@@ -1,6 +1,6 @@
 'use client';
 
-import {useState} from 'react';
+import {useState, useEffect} from 'react';
 import {useAuth} from '@/contexts/auth-context';
 import {Button} from './button';
 import {Moon, Sun, User} from 'lucide-react';
@@ -17,6 +17,45 @@ export function Header() {
   const {user, logout} = useAuth();
   const router = useRouter();
 
+  useEffect(() => {
+    // Function to set theme based on system preference or time
+    const setThemeBasedOnPreference = () => {
+      // Check system preference
+      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      // If system preference is available, use it
+      if (systemPrefersDark) {
+        setTheme('dark');
+        document.documentElement.classList.add('dark');
+        return;
+      }
+
+      // If no system preference, check time of day
+      const hour = new Date().getHours();
+      const isNightTime = hour >= 18 || hour <= 6; // 6 PM to 6 AM is considered night
+
+      if (isNightTime) {
+        setTheme('dark');
+        document.documentElement.classList.add('dark');
+      } else {
+        setTheme('light');
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    // Set initial theme
+    setThemeBasedOnPreference();
+
+    // Listen for system preference changes
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaQuery.addEventListener('change', setThemeBasedOnPreference);
+
+    // Cleanup listener on unmount
+    return () => {
+      mediaQuery.removeEventListener('change', setThemeBasedOnPreference);
+    };
+  }, []);
+
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
@@ -32,7 +71,7 @@ export function Header() {
   return (
     <header className="w-full py-4 px-6 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <img src="/logo.png" alt="Bilbul Logo" className="w-8 h-8" />
+        <img src="/logo.png" alt="Bilbul Logo" className="w-8 h-8 rounded-lg" />
         <span className="font-semibold text-lg">Bilbul</span>
         <p className="text-sm text-muted-foreground">Easily split your bill</p>
       </div>

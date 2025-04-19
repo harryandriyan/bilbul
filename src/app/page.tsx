@@ -553,6 +553,7 @@ export default function Home() {
                               onClick={() => handleEditItem(index)}
                               className="h-6 w-6 p-0"
                             >
+                              {/* @ts-ignore */}
                               <Icons.pencil className="h-3 w-3" />
                             </Button>
                           </div>

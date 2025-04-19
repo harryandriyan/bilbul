@@ -49,12 +49,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${nunito.variable} ${switzer.variable}`}>
+    <html lang="en" className={`${nunito.variable} ${switzer.variable} dark`}>
       <head>
         <link rel="icon" href="/logo.png" />
         <link rel="apple-touch-icon" href="/logo.png" />
       </head>
-      <body className="font-switzer">
+      <body className="font-switzer bg-background text-foreground">
         <AuthProvider>
           {children}
         </AuthProvider>

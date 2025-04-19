@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import {signInWithEmailAndPassword, createUserWithEmailAndPassword} from 'firebase/auth';
+import {signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup} from 'firebase/auth';
 import {auth} from '@/lib/firebase-client';
 import {useAuthStore} from '@/lib/firebase';
 
@@ -91,7 +91,28 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
   };
 
   const signInWithGoogle = async () => {
-    window.location.href = '/api/auth/google';
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const idToken = await result.user.getIdToken();
+
+      // Create a session with our backend
+      const response = await fetch('/api/auth/signin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({email: result.user.email}),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+
+      setUser(data.user);
+    } catch (error: any) {
+      throw new Error(error.message);
+    }
   };
 
   const logout = async () => {

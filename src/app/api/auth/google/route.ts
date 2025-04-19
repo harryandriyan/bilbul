@@ -1,7 +1,6 @@
 import {NextResponse} from 'next/server';
 import {initializeApp, getApps, cert} from 'firebase-admin/app';
 import {getAuth} from 'firebase-admin/auth';
-import {OAuth2Client} from 'google-auth-library';
 
 // Initialize Firebase Admin
 const apps = getApps();
@@ -15,27 +14,29 @@ if (!apps.length) {
   });
 }
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const REDIRECT_URI = process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google/callback` : 'http://localhost:9002/api/auth/google/callback';
-
-const oauth2Client = new OAuth2Client(
-  GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET,
-  REDIRECT_URI
-);
-
 export async function GET(request: Request) {
-  // Generate the url that will be used for the consent dialog.
-  const authorizeUrl = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: [
-      'https://www.googleapis.com/auth/userinfo.profile',
-      'https://www.googleapis.com/auth/userinfo.email'
-    ]
-  });
+  try {
+    // Get the current host from the request
+    const host = request.headers.get('host') || 'localhost:3000';
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    const redirectUrl = `${protocol}://${host}`;
 
-  return NextResponse.redirect(authorizeUrl);
+    // Use NEXT_PUBLIC_ prefixed variables for client-side values
+    const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+    const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+
+    if (!authDomain || !apiKey) {
+      throw new Error('Missing required Firebase configuration');
+    }
+
+    // Redirect to Firebase's Google auth page
+    const url = `https://${authDomain}/__/auth/handler?apiKey=${apiKey}&authType=signInWithPopup&provider=google.com&redirectUrl=${redirectUrl}`;
+
+    return NextResponse.redirect(url);
+  } catch (error) {
+    console.error('Error in Google auth redirect:', error);
+    return NextResponse.redirect('/auth?error=Failed to initialize Google sign-in');
+  }
 }
 
 export async function POST(request: Request) {

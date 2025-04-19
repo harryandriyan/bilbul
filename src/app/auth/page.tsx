@@ -66,7 +66,7 @@ export default function AuthPage() {
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-1">
           <div className="flex items-center gap-3 mb-2">
-            <img src="/logo.png" alt="Bilbul Logo" className="w-8 h-8" />
+            <img src="/logo.png" alt="Bilbul Logo" className="w-8 h-8 rounded-lg" />
             <CardTitle className="text-2xl">Welcome to Bilbul</CardTitle>
           </div>
           <CardDescription>
