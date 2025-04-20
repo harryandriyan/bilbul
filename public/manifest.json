@@ -1,19 +1,20 @@
 {
   "name": "Bilbul",
   "short_name": "Bilbul",
-  "description": "Easily split your bill with friends and family",
+  "description": "Split bills easily with Bilbul",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#74A700",
+  "theme_color": "#000000",
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/icon-192x192.png",
+      "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/icon-512x512.png",
+      "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

@@ -22,10 +22,20 @@ import {toast} from "@/hooks/use-toast";
 import {Toaster} from "@/components/ui/toaster";
 import {useDropzone} from 'react-dropzone';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
-import {Copy, Moon, Sun} from "lucide-react";
+import {Copy, Pencil, ArrowRight, Check, Sparkles} from "lucide-react";
 import {useAuth} from '@/contexts/auth-context';
 import {useRouter} from 'next/navigation';
 import {Header} from '@/components/ui/header';
+import dynamic from 'next/dynamic';
+import {motion, AnimatePresence} from "framer-motion";
+import Link from "next/link"
+import Image from "next/image"
+import {ChevronLeft, ChevronRight, Sun, Moon} from "lucide-react";
+import {useTheme} from '@/contexts/theme-context';
+
+const ReactConfetti = dynamic(() => import('react-confetti'), {
+  ssr: false
+});
 
 const formSchema = z.object({
   numberOfPeople: z.number().min(1, {message: "Number of people must be at least 1"}).max(5, {message: "Number of people cannot exceed 5"}),
@@ -39,9 +49,115 @@ type Person = {
   items: {itemId: number; quantity: number}[];
 }
 
+const features = [
+  {
+    title: "Smart Receipt Scanning",
+    description: "AI-powered receipt scanning that accurately detects items and prices",
+    icon: Sparkles,
+  },
+  {
+    title: "Fair Split Algorithm",
+    description: "Intelligent algorithm that suggests the fairest way to split the bill",
+    icon: Check,
+  },
+  {
+    title: "Easy Sharing",
+    description: "Share split results instantly with friends via text or email",
+    icon: ArrowRight,
+  },
+]
+
+const pricing = [
+  {
+    name: "Free",
+    price: "$0",
+    description: "Perfect for occasional use",
+    features: [
+      "3 splits per day",
+      "Basic receipt scanning",
+      "Simple sharing",
+    ],
+    cta: "Get Started",
+  },
+  {
+    name: "Premium",
+    price: "$2.99",
+    period: "/month",
+    description: "For power users and groups",
+    features: [
+      "Unlimited splits",
+      "Friend list management",
+      "Split history",
+      "Advanced receipt scanning",
+      "Priority support",
+    ],
+    cta: "Upgrade Now",
+    highlight: true,
+  },
+]
+
+const HowItWorksSlider = () => {
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const slides = [
+    '/how-it-works-1.png',
+    '/how-it-works-2.png',
+    '/how-it-works-3.png'
+  ];
+
+  const nextSlide = () => {
+    setCurrentSlide((prev) => (prev + 1) % slides.length);
+  };
+
+  const prevSlide = () => {
+    setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
+  };
+
+  return (
+    <div className="relative w-full max-w-2xl mx-auto">
+      <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-gray-200 dark:bg-gray-700">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentSlide}
+            initial={{opacity: 0}}
+            animate={{opacity: 1}}
+            exit={{opacity: 0}}
+            transition={{duration: 0.3}}
+            className="absolute inset-0"
+          >
+            <Image
+              src={slides[currentSlide]}
+              alt={`How it works step ${currentSlide + 1}`}
+              fill
+              className="object-cover"
+              priority
+            />
+          </motion.div>
+        </AnimatePresence>
+      </div>
+      <div className="absolute bottom-4 items-center left-4 right-4 flex justify-between">
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={prevSlide}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={nextSlide}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 export default function Home() {
   const {user, loading: authLoading} = useAuth();
   const router = useRouter();
+  const {theme, toggleTheme} = useTheme();
   const [receiptData, setReceiptData] = useState<ExtractReceiptDataOutput | null>(null);
   const [suggestedSplit, setSuggestedSplit] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -52,10 +168,23 @@ export default function Home() {
   const [remainingQuantities, setRemainingQuantities] = useState<{[itemId: number]: number}>({});
   const [activeStep, setActiveStep] = useState(0); // 0: initial, 1: receipt details, 2: split options, 3: advanced split
   const [isReceiptDataExtracted, setIsReceiptDataExtracted] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [editingItem, setEditingItem] = useState<number | null>(null);
   const [editedItems, setEditedItems] = useState<{[key: number]: {name: string; price: number}}>({});
   const [hasSplitBill, setHasSplitBill] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [windowSize, setWindowSize] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 0,
+    height: typeof window !== 'undefined' ? window.innerHeight : 0,
+  });
+  const [showOnlyResult, setShowOnlyResult] = useState(false);
+
+  // Add smooth scrolling behavior
+  useEffect(() => {
+    document.documentElement.style.scrollBehavior = 'smooth';
+    return () => {
+      document.documentElement.style.scrollBehavior = 'auto';
+    };
+  }, []);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -80,14 +209,26 @@ export default function Home() {
   }, [user, authLoading, router, hasSplitBill]);
 
   useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove('light', 'dark');
-    root.classList.add(theme);
-  }, [theme]);
+    const handleResize = () => {
+      setWindowSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
 
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (activeStep === 3 && suggestedSplit) {
+      setShowConfetti(true);
+      const timer = setTimeout(() => {
+        setShowConfetti(false);
+      }, 5000); // Show confetti for 5 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [activeStep, suggestedSplit]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     // Check if user is logged in or hasn't used split bill yet
@@ -178,7 +319,7 @@ export default function Home() {
     }
   }
 
-  async function onSuggestSplit(numberOfPeople: number) {
+  const onSuggestSplit = async (numberOfPeople: number) => {
     if (!receiptData) {
       toast({
         variant: "destructive",
@@ -193,22 +334,23 @@ export default function Home() {
       const {suggestSplit} = await import('@/ai/flows/suggest-split');
       const splitSuggestion = await suggestSplit({receiptData: receiptDataString, numberOfPeople: numberOfPeople});
       setSuggestedSplit(splitSuggestion.suggestedSplit);
+      setShowOnlyResult(true);
       toast({
         title: "Split suggested successfully!",
         description: "Check the suggested split below.",
-      })
-      setActiveStep(3); // Move to the final step to show the result.
+      });
+      setActiveStep(3);
     } catch (error: any) {
       console.error("Error suggesting split:", error);
       toast({
         variant: "destructive",
         title: "Error suggesting split.",
         description: error.message,
-      })
+      });
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -316,11 +458,12 @@ export default function Home() {
     });
 
     setSuggestedSplit(splitSummary);
+    setShowOnlyResult(true);
     toast({
       title: "Advanced split confirmed!",
       description: "Check the suggested advanced split below.",
     });
-    setActiveStep(3); // Move to the final step to show the result.
+    setActiveStep(3);
   };
 
   const copyToClipboard = () => {
@@ -404,322 +547,255 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main className="container mx-auto p-4">
-        <div className="flex flex-col items-center justify-center min-h-screen py-4 px-4 bg-background">
-          <Toaster />
-          <div className="w-full max-w-sm">
-
-            {/* Step Indicator */}
-            <div className="flex justify-between items-center mb-6">
-              {[0, 1, 2, 3].map((step) => (
-                <div key={step} className="flex flex-col items-center">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${activeStep >= step ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                    }`}>
-                    {step + 1}
-                  </div>
-                  <span className="text-xs mt-1 text-center">
-                    {step === 0 ? 'Upload' : step === 1 ? 'Details' : step === 2 ? 'Split' : 'Result'}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {activeStep === 0 && (
-              <Card className="w-full">
-                <CardHeader>
-                  <CardTitle className="text-lg">Upload Receipt</CardTitle>
-                  <CardDescription>Upload the receipt image and select number of people</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Form {...form}>
-                    <div className="space-y-4">
-                      <FormItem>
-                        <FormLabel>Receipt Image</FormLabel>
-                        <FormControl>
-                          <div {...getRootProps()} className="dropzone rounded-md border-2 border-dashed p-4 cursor-pointer">
-                            <input {...getInputProps()} />
-                            {isDragActive ? (
-                              <p className="text-sm text-center">Drop the files here ...</p>
-                            ) : (
-                              <p className="text-sm text-center">Drag 'n' drop or click to select</p>
-                            )}
-                            {imageUrl && (
-                              <img
-                                src={imageUrl}
-                                alt="Uploaded Receipt"
-                                className="mt-4 rounded-md max-h-32 object-contain mx-auto"
-                              />
-                            )}
-                          </div>
-                        </FormControl>
-                      </FormItem>
-                      {imageUrl &&
-                        <FormItem>
-                          <FormLabel>Number of People</FormLabel>
-                          <FormControl>
-                            <div className="grid grid-cols-2 gap-2">
-                              {numberOfPeopleOptions.map((number) => (
-                                <Button
-                                  key={number}
-                                  type="button"
-                                  variant={form.watch("numberOfPeople") === number ? "default" : "outline"}
-                                  onClick={() => form.setValue("numberOfPeople", number)}
-                                  className="w-full"
-                                >
-                                  {number} People
-                                </Button>
-                              ))}
-                            </div>
-                          </FormControl>
-                        </FormItem>
-                      }
-                      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                        <Button
-                          type="submit"
-                          disabled={loading || !imageUrl}
-                          className="w-full"
-                        >
-                          {loading && <Icons.loader className="mr-2 h-4 w-4 animate-spin" />}
-                          Extract Receipt
-                        </Button>
-                      </form>
-                    </div>
-                  </Form>
-                </CardContent>
-              </Card>
-            )}
-
-            {activeStep >= 1 && receiptData && (
-              <Card className="w-full">
-                <CardHeader>
-                  <CardTitle className="text-lg">Receipt Details</CardTitle>
-                  <CardDescription>Review and edit the extracted items if needed</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {receiptData?.items?.map((item, index) => (
-                    <div key={index} className="flex flex-col gap-2 py-2 border-b">
-                      {editingItem === index ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Input
-                              value={editedItems[index]?.name || ''}
-                              onChange={(e) => setEditedItems(prev => ({
-                                ...prev,
-                                [index]: {...prev[index], name: e.target.value}
-                              }))}
-                              className="flex-1"
-                              placeholder="Item name"
-                            />
-                            <Input
-                              type="number"
-                              value={editedItems[index]?.price || 0}
-                              onChange={(e) => setEditedItems(prev => ({
-                                ...prev,
-                                [index]: {...prev[index], price: parseFloat(e.target.value)}
-                              }))}
-                              className="w-24"
-                              placeholder="Price"
-                              step="0.01"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => handleSaveEdit(index)}
-                              className="flex-1"
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleCancelEdit(index)}
-                              className="flex-1"
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{item.name}</span>
-                            <span className="text-sm text-muted-foreground">x{item.quantity}</span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditItem(index)}
-                              className="h-6 w-6 p-0"
-                            >
-                              {/* @ts-ignore */}
-                              <Icons.pencil className="h-3 w-3" />
-                            </Button>
-                          </div>
-                          <span className="font-medium">${item.price.toFixed(2)}</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  <div className="flex justify-between items-center pt-2 font-bold">
-                    <span>Total</span>
-                    <span>${receiptData?.totalAmount?.toFixed(2)}</span>
-                  </div>
-                  {activeStep === 1 && (
-                    <Button onClick={() => setActiveStep(2)} className="w-full mt-4">
-                      Next: Split Options
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {activeStep >= 2 && receiptData && (
-              <Card className="w-full">
-                <CardHeader>
-                  <CardTitle className="text-lg">Split Options</CardTitle>
-                  <CardDescription>Choose how to split the bill</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Tabs defaultValue="simple" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                      <TabsTrigger value="simple">Simple</TabsTrigger>
-                      <TabsTrigger value="advanced">Advanced</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="simple" className="space-y-4">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button disabled={loading} className="w-full">
-                            {loading && <Icons.loader className="mr-2 h-4 w-4 animate-spin" />}
-                            Suggest Split
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Suggest Split</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to suggest split for {form.getValues().numberOfPeople} people?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => onSuggestSplit(form.getValues().numberOfPeople)}>Confirm</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                      <Button
-                        variant="secondary"
-                        onClick={handleStartOver}
-                        className="w-full"
-                      >
-                        Start Over
-                      </Button>
-                    </TabsContent>
-                    <TabsContent value="advanced" className="space-y-4">
-                      <Form {...form}>
-                        {people.map((person) => (
-                          <FormItem key={person.id}>
-                            <FormLabel htmlFor={`person-${person.id}-name`}>
-                              {`Person ${person.id} Name`}
-                            </FormLabel>
-                            <FormControl>
-                              <Input
-                                type="text"
-                                id={`person-${person.id}-name`}
-                                value={person.name}
-                                onChange={(e) => updatePersonName(person.id, e.target.value)}
-                              />
-                            </FormControl>
-                          </FormItem>
-                        ))}
-                      </Form>
-                      <div className="space-y-4">
-                        {receiptData?.items?.map((item: ExtractReceiptDataOutput['items'][0], index: number) => (
-                          <div key={index} className="flex flex-col gap-2 p-3 border rounded-lg">
-                            <div className="flex justify-between items-center">
-                              <span className="font-medium">{item.name}</span>
-                              <span className="text-sm text-muted-foreground">
-                                {remainingQuantities[index] !== undefined ? remainingQuantities[index] : item.quantity} left
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              {people.map(person => {
-                                const isAssigned = assignedItems.some(
-                                  assignment => assignment.personId === person.id && assignment.itemId === index
-                                );
-                                return (
-                                  <Button
-                                    key={person.id}
-                                    onClick={() => {
-                                      const quantity = 1;
-                                      handleItemAssignment(person.id, index, quantity);
-                                    }}
-                                    disabled={!isReceiptDataExtracted || isAdvancedSplitDone || (remainingQuantities[index] === undefined || remainingQuantities[index] <= 0)}
-                                    variant={isAssigned ? "default" : "outline"}
-                                    size="sm"
-                                    className="w-full"
-                                  >
-                                    {person.name}
-                                  </Button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex flex-col gap-2 mt-4">
-                        <Button onClick={handleDone} disabled={isAdvancedSplitDone} className="w-full">
-                          {isAdvancedSplitDone ? "Done" : "Mark as Done"}
-                        </Button>
-                        {isAdvancedSplitDone && (
-                          <Button onClick={confirmAdvancedSplit} className="w-full">
-                            Confirm Advanced Split
-                          </Button>
-                        )}
-                        <Button
-                          variant="secondary"
-                          onClick={handleStartOver}
-                          className="w-full"
-                        >
-                          Start Over
-                        </Button>
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-                </CardContent>
-              </Card>
-            )}
-
-            {activeStep === 3 && suggestedSplit && (
-              <Card className="w-full border-2 border-primary/20 shadow-lg">
-                <CardHeader className="bg-primary/5 dark:bg-primary/10 rounded-t-lg">
-                  <CardTitle className="text-xl font-bold">Split Result</CardTitle>
-                  <CardDescription>Here's how the bill is split</CardDescription>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="relative">
-                    <Textarea
-                      readOnly
-                      value={suggestedSplit}
-                      className="min-h-[200px] font-nunito text-base bg-background/50 dark:bg-background/80"
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute top-2 right-2 hover:bg-primary/10"
-                      onClick={copyToClipboard}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+    <div className="flex flex-col min-h-screen">
+      {/* Navbar */}
+      <nav className="w-full border-b">
+        <div className="container flex h-16 items-center px-4 md:px-6">
+          <Link href="/" className="flex items-center space-x-2">
+            <Image
+              src="/logo.png"
+              alt="Bilbul Logo"
+              width={32}
+              height={32}
+              className="rounded-lg"
+            />
+            <span className="font-medium text-xl">Bilbul</span>
+          </Link>
+          <div className="ml-auto flex items-center space-x-4">
+            <Link href="#pricing" scroll={true} className="scroll-smooth">
+              <Button variant="ghost">Pricing</Button>
+            </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+            >
+              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </Button>
+            {user ? (
+              <Link href="/app">
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Image
+                    src={user.photoURL ?? "/default-avatar.png"}
+                    alt="User avatar"
+                    width={24}
+                    height={24}
+                    className="rounded-full"
+                  />
+                  <span>Dashboard</span>
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/auth">
+                <Button>Get Started</Button>
+              </Link>
             )}
           </div>
         </div>
-      </main>
-      <Toaster />
+      </nav>
+
+      {/* Hero Section */}
+      <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48 relative overflow-hidden">
+        {/* Animated background */}
+        <div className="absolute inset-0 -z-10">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/5 dark:from-primary/10 dark:to-primary/5" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,0,0,0)_0%,rgba(0,0,0,0)_50%,rgba(0,0,0,0.1)_100%)] dark:bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0)_0%,rgba(255,255,255,0)_50%,rgba(255,255,255,0.1)_100%)]" />
+          <motion.div
+            className="absolute inset-0"
+            animate={{
+              background: [
+                'radial-gradient(circle at 0% 0%, rgba(255,255,255,0.1) 0%, transparent 50%)',
+                'radial-gradient(circle at 100% 100%, rgba(255,255,255,0.1) 0%, transparent 50%)',
+                'radial-gradient(circle at 0% 100%, rgba(255,255,255,0.1) 0%, transparent 50%)',
+                'radial-gradient(circle at 100% 0%, rgba(255,255,255,0.1) 0%, transparent 50%)',
+                'radial-gradient(circle at 0% 0%, rgba(255,255,255,0.1) 0%, transparent 50%)',
+              ],
+            }}
+            transition={{
+              duration: 20,
+              repeat: Infinity,
+              ease: "linear",
+            }}
+          />
+        </div>
+
+        <div className="container px-4 md:px-6">
+          <div className="flex flex-col items-center space-y-4 text-center">
+            <div className="space-y-2">
+              <motion.h1
+                className="text-3xl font-medium tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl/none"
+                initial={{opacity: 0, y: 20}}
+                animate={{opacity: 1, y: 0}}
+                transition={{duration: 0.5}}
+              >
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60 dark:from-primary/90 dark:to-primary/40">
+                  Split Bills Fairly with <span className="text-secondary">AI</span>
+                </span>
+              </motion.h1>
+              <motion.p
+                className="mx-auto max-w-[700px] text-gray-500 md:text-xl dark:text-gray-400"
+                initial={{opacity: 0, y: 20}}
+                animate={{opacity: 1, y: 0}}
+                transition={{duration: 0.5, delay: 0.2}}
+              >
+                Upload a receipt and let our AI handle the rest. No more arguments about who owes what.
+              </motion.p>
+            </div>
+            <motion.div
+              className="space-x-4"
+              initial={{opacity: 0, y: 20}}
+              animate={{opacity: 1, y: 0}}
+              transition={{duration: 0.5, delay: 0.4}}
+            >
+              <Link href="/app">
+                <Button size="lg" className="relative group">
+                  <span className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/10 rounded-lg blur-xl group-hover:blur-2xl transition-all duration-300" />
+                  <span className="relative">Try it Free</span>
+                </Button>
+              </Link>
+              <Button variant="secondary" size="lg">Learn More</Button>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="w-full py-12 md:py-24 lg:py-32 bg-gray-100 dark:bg-gray-900">
+        <div className="container px-4 md:px-6">
+          <div className="flex flex-col items-center justify-center space-y-4 text-center">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-medium tracking-tighter sm:text-4xl">Why Choose Bilbul?</h2>
+              <p className="max-w-[900px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
+                Our AI-powered platform makes bill splitting effortless and fair.
+              </p>
+            </div>
+          </div>
+          <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-3 lg:gap-12 mt-12">
+            {features.map((feature) => (
+              <Card key={feature.title} className="flex flex-col items-center p-6 text-center">
+                <feature.icon className="h-12 w-12 mb-4" />
+                <CardHeader>
+                  <CardTitle className="font-medium">{feature.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription>{feature.description}</CardDescription>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works Section */}
+      <section className="w-full py-12 md:py-24 lg:py-32">
+        <div className="container px-4 md:px-6">
+          <div className="grid gap-6 lg:grid-cols-2 lg:gap-12">
+            <div className="flex flex-col justify-center space-y-4">
+              <div className="space-y-2">
+                <h2 className="text-3xl font-medium tracking-tighter sm:text-4xl">How It Works</h2>
+                <p className="text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
+                  Split bills in three simple steps
+                </p>
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-start space-x-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    1
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-medium">Upload Receipt</h3>
+                    <p className="text-gray-500 dark:text-gray-400">Take a photo or upload your receipt</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    2
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-medium">Review Items</h3>
+                    <p className="text-gray-500 dark:text-gray-400">Our AI detects all items and prices</p>
+                  </div>
+                </div>
+                <div className="flex items-start space-x-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    3
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-medium">Split & Share</h3>
+                    <p className="text-gray-500 dark:text-gray-400">Get fair split suggestions and share with friends</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-center">
+              <HowItWorksSlider />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section className="w-full py-12 md:py-24 lg:py-32 bg-gray-100 dark:bg-gray-900" id="pricing">
+        <div className="container px-4 md:px-6">
+          <div className="flex flex-col items-center justify-center space-y-4 text-center">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-medium tracking-tighter sm:text-4xl">Simple, Transparent Pricing</h2>
+              <p className="max-w-[900px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
+                Choose the plan that's right for you
+              </p>
+            </div>
+          </div>
+          <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2 lg:gap-12 mt-12">
+            {pricing.map((plan) => (
+              <Card key={plan.name} className={`flex flex-col ${plan.highlight ? 'border-primary' : ''}`}>
+                <CardHeader>
+                  <CardTitle className="font-medium">{plan.name}</CardTitle>
+                  <div className="flex items-baseline space-x-1">
+                    <span className="text-3xl font-medium">{plan.price}</span>
+                    {plan.period && <span className="text-gray-500">{plan.period}</span>}
+                  </div>
+                  <CardDescription>{plan.description}</CardDescription>
+                </CardHeader>
+                <CardContent className="flex-1">
+                  <ul className="space-y-2">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-center">
+                        <Check className="mr-2 h-4 w-4" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+                <div className="p-6">
+                  <Button className="w-full" variant={plan.highlight ? "default" : "outline"}>
+                    {plan.cta}
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="w-full py-12 md:py-24 lg:py-32">
+        <div className="container px-4 md:px-6">
+          <div className="flex flex-col items-center justify-center space-y-4 text-center">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-medium tracking-tighter sm:text-4xl">Ready to Get Started?</h2>
+              <p className="max-w-[600px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
+                Join thousands of users who are splitting bills the smart way.
+              </p>
+            </div>
+            <div className="space-x-4">
+              <Link href="/app">
+                <Button size="lg">Try it Free</Button>
+              </Link>
+              <Button variant="outline" size="lg">Contact Sales</Button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
