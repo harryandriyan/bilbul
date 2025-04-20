@@ -1,30 +1,23 @@
 import {NextResponse} from 'next/server';
 import {initializeApp, getApps, cert} from 'firebase-admin/app';
-import {getAuth} from 'firebase-admin/auth';
-import {signInWithEmailAndPassword} from 'firebase/auth';
-import {initializeApp as initializeClientApp} from 'firebase/app';
+import {getAuth as getAdminAuth} from 'firebase-admin/auth';
+import {getAuth, signInWithEmailAndPassword} from 'firebase/auth';
+import {clientApp} from '@/lib/firebase/client';
 
 // Initialize Firebase Admin
-const apps = getApps();
-if (!apps.length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
-}
-
-// Initialize Firebase Client
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.FIREBASE_PROJECT_ID,
+const firebaseAdminConfig = {
+  credential: cert({
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  }),
 };
 
-const clientApp = initializeClientApp(firebaseConfig);
-const clientAuth = getAuth(clientApp);
+if (!getApps().length) {
+  initializeApp(firebaseAdminConfig);
+}
+
+const adminAuth = getAdminAuth();
 
 export async function POST(request: Request) {
   try {
@@ -32,51 +25,42 @@ export async function POST(request: Request) {
 
     if (!email || !password) {
       return NextResponse.json(
-        {error: 'Missing email or password'},
+        {error: 'Email and password are required'},
         {status: 400}
       );
     }
 
     try {
+      const clientAuth = getAuth(clientApp);
       // Sign in with email and password using Firebase Client SDK
       const userCredential = await signInWithEmailAndPassword(clientAuth, email, password);
       const idToken = await userCredential.user.getIdToken();
 
       // Create a session cookie using the ID token
-      const auth = getAuth();
       const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
-      const sessionCookie = await auth.createSessionCookie(idToken, {expiresIn});
-
-      // Set the cookie
-      const response = NextResponse.json({
-        user: {
-          uid: userCredential.user.uid,
-          email: userCredential.user.email,
-          displayName: userCredential.user.displayName,
-          photoURL: userCredential.user.photoURL,
-        },
+      const sessionCookie = await adminAuth.createSessionCookie(idToken, {
+        expiresIn,
       });
 
-      response.cookies.set('session', sessionCookie, {
-        maxAge: expiresIn,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-      });
-
-      return response;
-    } catch (error) {
+      return NextResponse.json(
+        {success: true},
+        {
+          headers: {
+            'Set-Cookie': `session=${sessionCookie}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${expiresIn}`,
+          },
+        }
+      );
+    } catch (error: any) {
       console.error('Error signing in:', error);
       return NextResponse.json(
         {error: 'Invalid email or password'},
         {status: 401}
       );
     }
-  } catch (error: any) {
-    console.error('Error in sign-in process:', error);
+  } catch (error) {
+    console.error('Error processing request:', error);
     return NextResponse.json(
-      {error: error.message || 'Failed to sign in'},
+      {error: 'Internal server error'},
       {status: 500}
     );
   }

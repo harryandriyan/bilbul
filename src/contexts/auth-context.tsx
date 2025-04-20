@@ -12,9 +12,10 @@ interface User {
   photoURL?: string | null;
 }
 
-type AuthContextType = {
+export interface AuthContextType {
   user: User | null;
   loading: boolean;
+  setUser: (user: User | null) => void;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -130,6 +131,7 @@ export function AuthProvider({children}: {children: React.ReactNode}) {
   const value = {
     user,
     loading,
+    setUser,
     signInWithEmail,
     signUpWithEmail,
     signInWithGoogle,
