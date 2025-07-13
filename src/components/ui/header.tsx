@@ -10,20 +10,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from './dropdown-menu';
-import {useRouter} from 'next/navigation';
+import {useNavigate} from 'react-router-dom';
 
 export function Header() {
   const {user, logout} = useAuth();
   const {theme, toggleTheme} = useTheme();
-  const router = useRouter();
+  const navigate = useNavigate();
 
   const handleSignIn = () => {
-    router.push('/auth');
+    navigate('/auth');
   };
 
   return (
     <header className="w-full py-4 px-6 flex items-center justify-between">
-      <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/')}>
+      <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
         <img src="/logo.png" alt="Bilbul Logo" className="w-8 h-8 rounded-lg" />
         <span className="font-semibold text-lg">Bilbul</span>
         <p className="text-sm text-muted-foreground">Easily split your bill</p>

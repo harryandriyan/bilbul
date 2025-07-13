@@ -9,7 +9,7 @@
  */
 
 import {ai} from '@/ai/ai-instance';
-import {z} from 'genkit';
+import {z} from 'zod';
 
 const ExtractReceiptDataInputSchema = z.object({
   photoUrl: z.string().describe('The URL of the receipt image.'),

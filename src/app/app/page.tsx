@@ -2,8 +2,7 @@
 
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
-import {useState, useCallback, useEffect} from 'react';
-import {extractReceiptData} from '@/ai/flows/extract-receipt-data';
+import {useState, useCallback, useEffect, lazy} from 'react';
 import type {ExtractReceiptDataOutput} from '@/ai/flows/extract-receipt-data';
 import {
   Form,
@@ -24,15 +23,12 @@ import {useDropzone} from 'react-dropzone';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {Copy, Pencil} from "lucide-react";
 import {useAuth} from '@/contexts/auth-context';
-import {useRouter} from 'next/navigation';
+import {useNavigate} from 'react-router-dom';
 import {Header} from '@/components/ui/header';
-import dynamic from 'next/dynamic';
 import {motion, AnimatePresence} from "framer-motion";
 import ReCAPTCHA from "react-google-recaptcha";
 
-const ReactConfetti = dynamic(() => import('react-confetti'), {
-  ssr: false
-});
+const ReactConfetti = lazy(() => import('react-confetti'));
 
 const formSchema = z.object({
   numberOfPeople: z.number().min(1, {message: "Number of people must be at least 1"}).max(5, {message: "Number of people cannot exceed 5"}),
@@ -54,7 +50,7 @@ declare global {
 
 export default function App() {
   const {user, loading: authLoading} = useAuth();
-  const router = useRouter();
+  const router = useNavigate();
   const [receiptData, setReceiptData] = useState<ExtractReceiptDataOutput | null>(null);
   const [suggestedSplit, setSuggestedSplit] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -95,7 +91,7 @@ export default function App() {
   useEffect(() => {
     // Only redirect if user has already used split bill once
     if (!authLoading && !user && hasSplitBill) {
-      router.push('/auth');
+      router('/auth');
     }
   }, [user, authLoading, router, hasSplitBill]);
 
@@ -162,7 +158,7 @@ export default function App() {
         title: "Sign in required",
         description: "Please sign in to continue using Bilbul.",
         action: (
-          <Button variant="outline" size="sm" onClick={() => router.push('/auth')}>
+          <Button variant="outline" size="sm" onClick={() => router('/auth')}>
             Sign in
           </Button>
         ),
@@ -187,7 +183,16 @@ export default function App() {
         return;
       }
 
-      const extractedData = await extractReceiptData({photoUrl: imageUrl});
+      const response = await fetch('/api/extract-receipt', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({photoUrl: imageUrl}),
+      });
+      const extractedData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(extractedData.error || "Could not extract receipt data. Please try again.");
+      }
 
       // Validate the extracted data
       if (!extractedData?.items?.length || !extractedData.totalAmount) {
@@ -256,8 +261,17 @@ export default function App() {
     setLoading(true);
     try {
       const receiptDataString = JSON.stringify(receiptData);
-      const {suggestSplit} = await import('@/ai/flows/suggest-split');
-      const splitSuggestion = await suggestSplit({receiptData: receiptDataString, numberOfPeople: numberOfPeople});
+      const response = await fetch('/api/suggest-split', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({receiptData: receiptDataString, numberOfPeople}),
+      });
+      const splitSuggestion = await response.json();
+
+      if (!response.ok) {
+        throw new Error(splitSuggestion.error || "Could not suggest split. Please try again.");
+      }
+
       setSuggestedSplit(splitSuggestion.suggestedSplit);
       setShowOnlyResult(true);
       toast({

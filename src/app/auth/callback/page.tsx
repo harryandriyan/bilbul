@@ -1,12 +1,10 @@
-'use client';
-
 import {useEffect} from 'react';
-import {useRouter, useSearchParams} from 'next/navigation';
+import {useNavigate, useSearchParams} from 'react-router-dom';
 import {useAuth} from '@/contexts/auth-context';
 
 export default function AuthCallback() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {setUser} = useAuth();
 
   useEffect(() => {
@@ -25,18 +23,18 @@ export default function AuthCallback() {
           if (data.user && data.token) {
             localStorage.setItem('authToken', data.token);
             setUser(data.user);
-            router.push('/');
+            navigate('/');
           } else {
-            router.push('/auth?error=Failed to authenticate');
+            navigate('/auth?error=Failed to authenticate');
           }
         })
         .catch(() => {
-          router.push('/auth?error=Failed to authenticate');
+          navigate('/auth?error=Failed to authenticate');
         });
     } else {
-      router.push('/auth?error=No token received');
+      navigate('/auth?error=No token received');
     }
-  }, [router, searchParams, setUser]);
+  }, [navigate, searchParams, setUser]);
 
   return (
     <div className="flex min-h-screen items-center justify-center">

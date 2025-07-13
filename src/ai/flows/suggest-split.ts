@@ -8,7 +8,7 @@
  */
 
 import {ai} from '@/ai/ai-instance';
-import {z} from 'genkit';
+import {z} from 'zod';
 
 const SuggestSplitInputSchema = z.object({
   receiptData: z.string().describe('The extracted receipt data.'),
@@ -58,4 +58,3 @@ const suggestSplitFlow = ai.defineFlow<
   return output!;
 });
 
-    

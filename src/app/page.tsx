@@ -2,8 +2,7 @@
 
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
-import {useState, useCallback, useEffect} from 'react';
-import {extractReceiptData} from '@/ai/flows/extract-receipt-data';
+import {useState, useCallback, useEffect, lazy} from 'react';
 import type {ExtractReceiptDataOutput} from '@/ai/flows/extract-receipt-data';
 import {
   Form,
@@ -24,18 +23,14 @@ import {useDropzone} from 'react-dropzone';
 import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs";
 import {Copy, Pencil, ArrowRight, Check, Sparkles} from "lucide-react";
 import {useAuth} from '@/contexts/auth-context';
-import {useRouter} from 'next/navigation';
+import {useNavigate} from 'react-router-dom';
 import {Header} from '@/components/ui/header';
-import dynamic from 'next/dynamic';
 import {motion, AnimatePresence} from "framer-motion";
-import Link from "next/link"
-import Image from "next/image"
 import {ChevronLeft, ChevronRight, Sun, Moon} from "lucide-react";
 import {useTheme} from '@/contexts/theme-context';
+import {useIsMobile} from '@/hooks/use-is-mobile';
 
-const ReactConfetti = dynamic(() => import('react-confetti'), {
-  ssr: false
-});
+const ReactConfetti = lazy(() => import('react-confetti'));
 
 const formSchema = z.object({
   numberOfPeople: z.number().min(1, {message: "Number of people must be at least 1"}).max(5, {message: "Number of people cannot exceed 5"}),
@@ -124,12 +119,10 @@ const HowItWorksSlider = () => {
             transition={{duration: 0.3}}
             className="absolute inset-0"
           >
-            <Image
+            <img
               src={slides[currentSlide]}
               alt={`How it works step ${currentSlide + 1}`}
-              fill
               className="object-cover"
-              priority
             />
           </motion.div>
         </AnimatePresence>
@@ -156,8 +149,8 @@ const HowItWorksSlider = () => {
 
 export default function Home() {
   const {user, loading: authLoading} = useAuth();
-  const router = useRouter();
-  const {theme, toggleTheme} = useTheme();
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [receiptData, setReceiptData] = useState<ExtractReceiptDataOutput | null>(null);
   const [suggestedSplit, setSuggestedSplit] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -204,9 +197,9 @@ export default function Home() {
   useEffect(() => {
     // Only redirect if user has already used split bill once
     if (!authLoading && !user && hasSplitBill) {
-      router.push('/auth');
+      navigate('/auth');
     }
-  }, [user, authLoading, router, hasSplitBill]);
+  }, [user, authLoading, navigate, hasSplitBill]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -237,7 +230,7 @@ export default function Home() {
         title: "Sign in required",
         description: "Please sign in to continue using Bilbul.",
         action: (
-          <Button variant="outline" size="sm" onClick={() => router.push('/auth')}>
+          <Button variant="outline" size="sm" onClick={() => navigate('/auth')}>
             Sign in
           </Button>
         ),
@@ -262,7 +255,17 @@ export default function Home() {
         return;
       }
 
-      const extractedData = await extractReceiptData({photoUrl: imageUrl});
+      const response = await fetch('/api/extract-receipt', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({photoUrl: imageUrl}),
+      });
+      const extractedData = await response.json();
+
+      // Handle errors if !response.ok
+      if (!response.ok) {
+        throw new Error("Could not extract receipt data. Please try again.");
+      }
 
       // Validate the extracted data
       if (!extractedData?.items?.length || !extractedData.totalAmount) {
@@ -270,7 +273,7 @@ export default function Home() {
       }
 
       // Validate items have valid prices and quantities
-      const hasInvalidItems = extractedData.items.some(item =>
+      const hasInvalidItems = extractedData.items.some((item: any) =>
         !item.name ||
         typeof item.price !== 'number' ||
         item.price <= 0 ||
@@ -286,7 +289,7 @@ export default function Home() {
 
       // Initialize remaining quantities
       const initialRemainingQuantities: {[itemId: number]: number} = {};
-      extractedData.items.forEach((item, index) => {
+      extractedData.items.forEach((item: any, index: number) => {
         initialRemainingQuantities[index] = item.quantity;
       });
       setRemainingQuantities(initialRemainingQuantities);
@@ -331,8 +334,12 @@ export default function Home() {
     setLoading(true);
     try {
       const receiptDataString = JSON.stringify(receiptData);
-      const {suggestSplit} = await import('@/ai/flows/suggest-split');
-      const splitSuggestion = await suggestSplit({receiptData: receiptDataString, numberOfPeople: numberOfPeople});
+      const response = await fetch('/api/suggest-split', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({receiptData: receiptDataString, numberOfPeople}),
+      });
+      const splitSuggestion = await response.json();
       setSuggestedSplit(splitSuggestion.suggestedSplit);
       setShowOnlyResult(true);
       toast({
@@ -546,256 +553,127 @@ export default function Home() {
     });
   };
 
-  return (
-    <div className="flex flex-col min-h-screen">
-      {/* Navbar */}
-      <nav className="w-full border-b">
-        <div className="container flex h-16 items-center px-4 md:px-6">
-          <Link href="/" className="flex items-center space-x-2">
-            <Image
-              src="/logo.png"
-              alt="Bilbul Logo"
-              width={32}
-              height={32}
-              className="rounded-lg"
-            />
-            <span className="font-medium text-xl">Bilbul</span>
-          </Link>
-          <div className="ml-auto flex items-center space-x-4">
-            <Link href="#pricing" scroll={true} className="scroll-smooth">
-              <Button variant="ghost">Pricing</Button>
-            </Link>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-            >
-              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </Button>
-            {user ? (
-              <Link href="/app">
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Image
-                    src={user.photoURL ?? "/default-avatar.png"}
-                    alt="User avatar"
-                    width={24}
-                    height={24}
-                    className="rounded-full"
-                  />
-                  <span>Dashboard</span>
-                </Button>
-              </Link>
-            ) : (
-              <Link href="/auth">
-                <Button>Get Started</Button>
-              </Link>
-            )}
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48 relative overflow-hidden">
-        {/* Animated background */}
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/5 dark:from-primary/10 dark:to-primary/5" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,0,0,0)_0%,rgba(0,0,0,0)_50%,rgba(0,0,0,0.1)_100%)] dark:bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0)_0%,rgba(255,255,255,0)_50%,rgba(255,255,255,0.1)_100%)]" />
-          <motion.div
-            className="absolute inset-0"
-            animate={{
-              background: [
-                'radial-gradient(circle at 0% 0%, rgba(255,255,255,0.1) 0%, transparent 50%)',
-                'radial-gradient(circle at 100% 100%, rgba(255,255,255,0.1) 0%, transparent 50%)',
-                'radial-gradient(circle at 0% 100%, rgba(255,255,255,0.1) 0%, transparent 50%)',
-                'radial-gradient(circle at 100% 0%, rgba(255,255,255,0.1) 0%, transparent 50%)',
-                'radial-gradient(circle at 0% 0%, rgba(255,255,255,0.1) 0%, transparent 50%)',
-              ],
-            }}
-            transition={{
-              duration: 20,
-              repeat: Infinity,
-              ease: "linear",
-            }}
-          />
-        </div>
-
-        <div className="container px-4 md:px-6">
-          <div className="flex flex-col items-center space-y-4 text-center">
-            <div className="space-y-2">
-              <motion.h1
-                className="text-3xl font-medium tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl/none"
-                initial={{opacity: 0, y: 20}}
-                animate={{opacity: 1, y: 0}}
-                transition={{duration: 0.5}}
-              >
-                <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/60 dark:from-primary/90 dark:to-primary/40">
-                  Split Bills Fairly with <span className="text-secondary">AI</span>
-                </span>
-              </motion.h1>
-              <motion.p
-                className="mx-auto max-w-[700px] text-gray-500 md:text-xl dark:text-gray-400"
-                initial={{opacity: 0, y: 20}}
-                animate={{opacity: 1, y: 0}}
-                transition={{duration: 0.5, delay: 0.2}}
-              >
-                Upload a receipt and let our AI handle the rest. No more arguments about who owes what.
-              </motion.p>
-            </div>
-            <motion.div
-              className="space-x-4"
-              initial={{opacity: 0, y: 20}}
-              animate={{opacity: 1, y: 0}}
-              transition={{duration: 0.5, delay: 0.4}}
-            >
-              <Link href="/app">
-                <Button size="lg" className="relative group">
-                  <span className="absolute inset-0 bg-gradient-to-r from-primary/20 to-primary/10 rounded-lg blur-xl group-hover:blur-2xl transition-all duration-300" />
-                  <span className="relative">Try it Free</span>
-                </Button>
-              </Link>
-              <Button variant="secondary" size="lg">Learn More</Button>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32 bg-gray-100 dark:bg-gray-900">
-        <div className="container px-4 md:px-6">
-          <div className="flex flex-col items-center justify-center space-y-4 text-center">
-            <div className="space-y-2">
-              <h2 className="text-3xl font-medium tracking-tighter sm:text-4xl">Why Choose Bilbul?</h2>
-              <p className="max-w-[900px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
-                Our AI-powered platform makes bill splitting effortless and fair.
-              </p>
-            </div>
-          </div>
-          <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-3 lg:gap-12 mt-12">
-            {features.map((feature) => (
-              <Card key={feature.title} className="flex flex-col items-center p-6 text-center">
-                <feature.icon className="h-12 w-12 mb-4" />
-                <CardHeader>
-                  <CardTitle className="font-medium">{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription>{feature.description}</CardDescription>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32">
-        <div className="container px-4 md:px-6">
-          <div className="grid gap-6 lg:grid-cols-2 lg:gap-12">
-            <div className="flex flex-col justify-center space-y-4">
-              <div className="space-y-2">
-                <h2 className="text-3xl font-medium tracking-tighter sm:text-4xl">How It Works</h2>
-                <p className="text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
-                  Split bills in three simple steps
-                </p>
-              </div>
+  const renderMobileOnlyMessage = () => {
+    if (!isMobile) {
+      return (
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle className="text-lg">Manual Upload</CardTitle>
+            <CardDescription>Upload your receipt image manually. For the best experience with receipt scanning, please use a mobile device.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
               <div className="space-y-4">
-                <div className="flex items-start space-x-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                    1
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-medium">Upload Receipt</h3>
-                    <p className="text-gray-500 dark:text-gray-400">Take a photo or upload your receipt</p>
-                  </div>
+                <FormItem>
+                  <FormLabel>Receipt Image</FormLabel>
+                  <FormControl>
+                    <div {...getRootProps()} className="dropzone rounded-md border-2 border-dashed p-4 cursor-pointer">
+                      <input {...getInputProps()} />
+                      {isDragActive ? (
+                        <p className="text-sm text-center">Drop the files here ...</p>
+                      ) : (
+                        <p className="text-sm text-center">Drag 'n' drop or click to select</p>
+                      )}
+                      {imageUrl && (
+                        <img
+                          src={imageUrl}
+                          alt="Uploaded Receipt"
+                          className="mt-4 rounded-md max-h-32 object-contain mx-auto"
+                        />
+                      )}
+                    </div>
+                  </FormControl>
+                </FormItem>
+                {imageUrl &&
+                  <FormItem>
+                    <FormLabel>Number of People</FormLabel>
+                    <FormControl>
+                      <div className="grid grid-cols-2 gap-2">
+                        {numberOfPeopleOptions.map((number) => (
+                          <Button
+                            key={number}
+                            type="button"
+                            variant={form.watch("numberOfPeople") === number ? "default" : "outline"}
+                            onClick={() => form.setValue("numberOfPeople", number)}
+                            className="w-full"
+                          >
+                            {number} People
+                          </Button>
+                        ))}
+                      </div>
+                    </FormControl>
+                  </FormItem>
+                }
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <Button
+                    type="submit"
+                    disabled={loading || !imageUrl}
+                    className="w-full"
+                  >
+                    {loading && <Icons.loader className="mr-2 h-4 w-4 animate-spin" />}
+                    Extract Receipt
+                  </Button>
+                </form>
+              </div>
+            </Form>
+          </CardContent>
+        </Card>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <Header />
+      <main className="flex-1">
+        <section className="w-full py-12 md:py-24 lg:py-32">
+          <div className="container px-4 md:px-6">
+            <div className="grid gap-6 lg:grid-cols-2 lg:gap-12">
+              <div className="flex flex-col justify-center space-y-4">
+                <div className="space-y-2">
+                  <h2 className="text-3xl font-medium tracking-tighter sm:text-4xl">How It Works</h2>
+                  <p className="text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
+                    Split bills in three simple steps
+                  </p>
                 </div>
-                <div className="flex items-start space-x-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                    2
+                <div className="space-y-4">
+                  <div className="flex items-start space-x-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      1
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-medium">Upload Receipt</h3>
+                      <p className="text-gray-500 dark:text-gray-400">Take a photo or upload your receipt</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-xl font-medium">Review Items</h3>
-                    <p className="text-gray-500 dark:text-gray-400">Our AI detects all items and prices</p>
+                  <div className="flex items-start space-x-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      2
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-medium">Review Items</h3>
+                      <p className="text-gray-500 dark:text-gray-400">Our AI detects all items and prices</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-start space-x-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                    3
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-medium">Split & Share</h3>
-                    <p className="text-gray-500 dark:text-gray-400">Get fair split suggestions and share with friends</p>
+                  <div className="flex items-start space-x-4">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      3
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-medium">Split Bill</h3>
+                      <p className="text-gray-500 dark:text-gray-400">Choose how to split the bill between people</p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center justify-center">
-              <HowItWorksSlider />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32 bg-gray-100 dark:bg-gray-900" id="pricing">
-        <div className="container px-4 md:px-6">
-          <div className="flex flex-col items-center justify-center space-y-4 text-center">
-            <div className="space-y-2">
-              <h2 className="text-3xl font-medium tracking-tighter sm:text-4xl">Simple, Transparent Pricing</h2>
-              <p className="max-w-[900px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
-                Choose the plan that's right for you
-              </p>
+              <div className="flex flex-col justify-center space-y-4">
+                {renderMobileOnlyMessage()}
+              </div>
             </div>
           </div>
-          <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 md:grid-cols-2 lg:gap-12 mt-12">
-            {pricing.map((plan) => (
-              <Card key={plan.name} className={`flex flex-col ${plan.highlight ? 'border-primary' : ''}`}>
-                <CardHeader>
-                  <CardTitle className="font-medium">{plan.name}</CardTitle>
-                  <div className="flex items-baseline space-x-1">
-                    <span className="text-3xl font-medium">{plan.price}</span>
-                    {plan.period && <span className="text-gray-500">{plan.period}</span>}
-                  </div>
-                  <CardDescription>{plan.description}</CardDescription>
-                </CardHeader>
-                <CardContent className="flex-1">
-                  <ul className="space-y-2">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-center">
-                        <Check className="mr-2 h-4 w-4" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-                <div className="p-6">
-                  <Button className="w-full" variant={plan.highlight ? "default" : "outline"}>
-                    {plan.cta}
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32">
-        <div className="container px-4 md:px-6">
-          <div className="flex flex-col items-center justify-center space-y-4 text-center">
-            <div className="space-y-2">
-              <h2 className="text-3xl font-medium tracking-tighter sm:text-4xl">Ready to Get Started?</h2>
-              <p className="max-w-[600px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
-                Join thousands of users who are splitting bills the smart way.
-              </p>
-            </div>
-            <div className="space-x-4">
-              <Link href="/app">
-                <Button size="lg">Try it Free</Button>
-              </Link>
-              <Button variant="outline" size="lg">Contact Sales</Button>
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
+      </main>
     </div>
   );
 }

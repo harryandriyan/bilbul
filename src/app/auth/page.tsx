@@ -1,7 +1,5 @@
-'use client';
-
 import {useState} from 'react';
-import {useRouter} from 'next/navigation';
+import {useNavigate} from 'react-router-dom';
 import {useAuth} from '@/contexts/auth-context';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -15,7 +13,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const {signInWithEmail, signUpWithEmail, signInWithGoogle} = useAuth();
-  const router = useRouter();
+  const navigate = useNavigate();
 
   const handleEmailAuth = async (isSignUp: boolean) => {
     setLoading(true);
@@ -25,7 +23,7 @@ export default function AuthPage() {
       } else {
         await signInWithEmail(email, password);
       }
-      router.push('/');
+      navigate('/');
       toast({
         title: isSignUp ? 'Account created successfully!' : 'Welcome back!',
         description: isSignUp ? 'You can now start using Bilbul.' : 'You have successfully signed in.',
@@ -45,7 +43,7 @@ export default function AuthPage() {
     setLoading(true);
     try {
       await signInWithGoogle();
-      router.push('/');
+      navigate('/');
       toast({
         title: 'Welcome!',
         description: 'You have successfully signed in with Google.',
